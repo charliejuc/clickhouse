@@ -11,8 +11,8 @@ const client = createClient({
   session_id: sessionId,
 });
 
-async function createTable() {
-  const createTableQuery = `
+async function createTables() {
+  const createMainTableQuery = `
   CREATE TABLE IF NOT EXISTS transactions (
     id UInt32,
     user_id UInt32,
@@ -23,13 +23,39 @@ async function createTable() {
   ORDER BY id;
   `;
 
+  const database = "default";
+  const table = "transactions";
+  const bufferLayers = 8;
+  const minTimeSeconds = 10;
+  const maxTimeSeconds = 60;
+  const minRows = 10_000;
+  const maxRows = 200_000;
+  const minBytes = 600_000;
+  const maxBytes = 1_000_000;
+  const createBufferTableQuery = `
+  CREATE TABLE IF NOT EXISTS transactions_buffer
+  ENGINE = Buffer(${database}, ${table}, ${bufferLayers}, ${minTimeSeconds}, ${maxTimeSeconds}, ${minRows}, ${maxRows}, ${minBytes}, ${maxBytes});
+  `;
+
   try {
-    await client.command({
-      query: createTableQuery,
-    });
-    console.log("Table created successfully");
+    await client.command({ query: createMainTableQuery });
+    console.log("Main table created successfully");
+
+    await client.command({ query: createBufferTableQuery });
+    console.log("Buffer table created successfully");
   } catch (error) {
-    console.error("Error creating table:", error);
+    console.error("Error creating tables:", error);
+  }
+}
+
+async function deleteBufferTable() {
+  const dropBufferTableQuery = "DROP TABLE IF EXISTS transactions_buffer";
+
+  try {
+    await client.command({ query: dropBufferTableQuery });
+    console.log("Buffer table deleted successfully");
+  } catch (error) {
+    console.error("Error deleting buffer table:", error);
   }
 }
 
@@ -51,7 +77,7 @@ async function insertRandomTransactions(totalCount, batchSize) {
 
     try {
       await client.insert({
-        table: "transactions",
+        table: "transactions_buffer",
         values: batch,
         format: "JSONEachRow",
       });
@@ -98,10 +124,11 @@ async function aggregateData() {
 }
 
 async function main() {
-  // await increaseMemoryLimit();
-  // await createTable();
-  const totalCount = 1_000_000;
-  const batchSize = 500_000;
+  await increaseMemoryLimit();
+  //   await deleteBufferTable();
+  await createTables();
+  const totalCount = 100_000;
+  const batchSize = 100;
   console.time("insertRandomTransactions");
   await insertRandomTransactions(totalCount, batchSize);
   console.timeEnd("insertRandomTransactions");
